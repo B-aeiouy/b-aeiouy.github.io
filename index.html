@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Weather Forecast Accuracy - Jericho, VT</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            padding: 20px;
+            background: #f0f2f5;
+        }
+        h1 { color: #333; }
+        .card { 
+            background: white; 
+            padding: 20px; 
+            margin: 15px 0; 
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .card h2 {
+            margin-top: 0;
+            color: #444;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+        }
+        th, td { 
+            padding: 12px; 
+            text-align: left; 
+            border-bottom: 1px solid #ddd; 
+        }
+        th { 
+            background: #4CAF50; 
+            color: white; 
+        }
+        tr:hover { background: #f5f5f5; }
+        .current-temp {
+            font-size: 48px;
+            font-weight: bold;
+            color: #333;
+        }
+        .current-desc {
+            font-size: 18px;
+            color: #666;
+            text-transform: capitalize;
+        }
+        .current-details {
+            margin-top: 10px;
+            color: #888;
+        }
+        .error {
+            color: #c00;
+            padding: 10px;
+            background: #fee;
+            border-radius: 4px;
+        }
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #888;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🌤️ Weather Forecast Accuracy</h1>
+    <p>Comparing forecast accuracy for Jericho, VT (05465)</p>
+    
+    <div class="card">
+        <h2>Current Conditions</h2>
+        <div id="current" class="loading">Loading current conditions...</div>
+    </div>
+    
+    <div class="card">
+        <h2>Accuracy Summary (Last 30 Days)</h2>
+        <div id="summary-container">
+            <table id="accuracy-table">
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th>Forecast Horizon</th>
+                        <th>MAE (°F)</th>
+                        <th>RMSE (°F)</th>
+                        <th>Samples</th>
+                    </tr>
+                </thead>
+                <tbody id="accuracy-body">
+                    <tr><td colspan="5" class="loading">Loading accuracy data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h2>Accuracy Trend Over Time</h2>
+        <canvas id="trend-chart"></canvas>
+        <div id="trend-loading" class="loading">Loading trend data...</div>
+    </div>
+
+    <footer>
+        CMIT-450 Senior Seminar Project | Data collected hourly from NWS and OpenWeatherMap
+    </footer>
+
+    <script>
+        const API_BASE = 'http://34.228.31.133:5000';
+        
+        // Load current conditions
+        fetch(`${API_BASE}/api/current`)
+            .then(r => {
+                if (!r.ok) throw new Error('API error');
+                return r.json();
+            })
+            .then(data => {
+                if (data && data.temperatureF) {
+                    document.getElementById('current').innerHTML = `
+                        <div class="current-temp">${data.temperatureF.toFixed(1)}°F</div>
+                        <div class="current-desc">${data.description || 'N/A'}</div>
+                        <div class="current-details">
+                            Humidity: ${data.humidityPct || 'N/A'}% | 
+                            Wind: ${data.windSpeedMph || 'N/A'} mph<br>
+                            Observed: ${new Date(data.observationTime).toLocaleString()}
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('current').innerHTML = '<div class="error">No current data available</div>';
+                }
+            })
+            .catch(err => {
+                document.getElementById('current').innerHTML = `<div class="error">Error loading current conditions: ${err.message}</div>`;
+            });
+        
+        // Load accuracy summary
+        fetch(`${API_BASE}/api/accuracy/summary`)
+            .then(r => {
+                if (!r.ok) throw new Error('API error');
+                return r.json();
+            })
+            .then(data => {
+                const tbody = document.getElementById('accuracy-body');
+                if (data && data.length > 0) {
+                    tbody.innerHTML = data.map(row => `
+                        <tr>
+                            <td>${row.source}</td>
+                            <td>${row.horizonHours} hours</td>
+                            <td>${row.mae ? row.mae.toFixed(2) : 'N/A'}</td>
+                            <td>${row.rmse ? row.rmse.toFixed(2) : 'N/A'}</td>
+                            <td>${row.samples || 0}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5">No accuracy data available yet</td></tr>';
+                }
+            })
+            .catch(err => {
+                document.getElementById('accuracy-body').innerHTML = `<tr><td colspan="5" class="error">Error loading accuracy data: ${err.message}</td></tr>`;
+            });
+        
+        // Load trend chart
+        fetch(`${API_BASE}/api/accuracy/trend`)
+            .then(r => {
+                if (!r.ok) throw new Error('API error');
+                return r.json();
+            })
+            .then(data => {
+                document.getElementById('trend-loading').style.display = 'none';
+                
+                if (!data || data.length === 0) {
+                    document.getElementById('trend-loading').innerHTML = 'No trend data available yet';
+                    document.getElementById('trend-loading').style.display = 'block';
+                    return;
+                }
+                
+                const ctx = document.getElementById('trend-chart').getContext('2d');
+                
+                // Group by source and horizon
+                const datasets = {};
+                const colors = {
+                    'OWM 1hr': '#FF6384',
+                    'OWM 6hr': '#36A2EB',
+                    'OWM 24hr': '#FFCE56',
+                    'NWS 1hr': '#4BC0C0',
+                    'NWS 6hr': '#9966FF',
+                    'NWS 24hr': '#FF9F40'
+                };
+                
+                data.forEach(row => {
+                    const key = `${row.source} ${row.horizonHours}hr`;
+                    if (!datasets[key]) {
+                        datasets[key] = { 
+                            label: key, 
+                            data: [],
+                            borderColor: colors[key] || '#999',
+                            backgroundColor: 'transparent',
+                            tension: 0.1
+                        };
+                    }
+                    datasets[key].data.push({ x: row.date, y: row.mae });
+                });
+                
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        datasets: Object.values(datasets)
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            x: { 
+                                type: 'category',
+                                title: { display: true, text: 'Date' }
+                            },
+                            y: { 
+                                title: { display: true, text: 'Mean Absolute Error (°F)' },
+                                beginAtZero: true
+                            }
+                        },
+                        plugins: {
+                            legend: { position: 'bottom' }
+                        }
+                    }
+                });
+            })
+            .catch(err => {
+                document.getElementById('trend-loading').innerHTML = `<span class="error">Error loading trend data: ${err.message}</span>`;
+            });
+    </script>
+</body>
+</html>
