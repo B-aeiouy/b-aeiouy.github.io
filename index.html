@@ -182,6 +182,9 @@
                 
                 const ctx = document.getElementById('trend-chart').getContext('2d');
                 
+                // Get unique sorted dates for x-axis labels
+                const labels = [...new Set(data.map(row => row.date))].sort();
+                
                 // Group by source and horizon
                 const datasets = {};
                 const colors = {
@@ -194,29 +197,34 @@
                 };
                 
                 data.forEach(row => {
+                    if (row.mae === null || row.mae === 'NaN') return; // Skip null/NaN values
                     const key = `${row.source} ${row.horizonHours}hr`;
                     if (!datasets[key]) {
                         datasets[key] = { 
                             label: key, 
-                            data: [],
+                            data: new Array(labels.length).fill(null), // Pre-fill with nulls
                             borderColor: colors[key] || '#999',
                             backgroundColor: 'transparent',
-                            tension: 0.1
+                            tension: 0.1,
+                            spanGaps: true // Connect lines across null values
                         };
                     }
-                    datasets[key].data.push({ x: row.date, y: row.mae });
+                    const dateIndex = labels.indexOf(row.date);
+                    if (dateIndex !== -1) {
+                        datasets[key].data[dateIndex] = row.mae;
+                    }
                 });
                 
                 new Chart(ctx, {
                     type: 'line',
                     data: {
+                        labels: labels,
                         datasets: Object.values(datasets)
                     },
                     options: {
                         responsive: true,
                         scales: {
                             x: { 
-                                type: 'category',
                                 title: { display: true, text: 'Date' }
                             },
                             y: { 
