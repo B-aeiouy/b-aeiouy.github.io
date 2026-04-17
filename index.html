@@ -198,6 +198,7 @@
                 
                 data.forEach(row => {
                     if (row.mae === null || row.mae === 'NaN') return; // Skip null/NaN values
+                    if (row.date >= today) return; // Skip today's incomplete data
                     const key = `${row.source} ${row.horizonHours}hr`;
                     if (!datasets[key]) {
                         datasets[key] = { 
@@ -214,12 +215,18 @@
                         datasets[key].data[dateIndex] = row.mae;
                     }
                 });
+
+                // Sort datasets: NWS first, then OWM, each sorted by horizon (1, 6, 24)
+                const sortOrder = ['NWS 1hr', 'NWS 6hr', 'NWS 24hr', 'OWM 1hr', 'OWM 6hr', 'OWM 24hr'];
+                const sortedDatasets = sortOrder
+                    .filter(key => datasets[key])
+                    .map(key => datasets[key]);
                 
                 new Chart(ctx, {
                     type: 'line',
                     data: {
                         labels: labels,
-                        datasets: Object.values(datasets)
+                        datasets: sortedDatasets
                     },
                     options: {
                         responsive: true,
