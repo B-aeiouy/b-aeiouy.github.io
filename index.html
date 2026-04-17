@@ -185,8 +185,9 @@
                 // Get today's date in YYYY-MM-DD format
                 const today = new Date().toISOString().split('T')[0];
                 
-                // Filter out today's incomplete data and get unique sorted dates
-                const labels = [...new Set(data.filter(row => row.date < today).map(row => row.date))].sort();
+                // Filter out today's incomplete data and early sporadic data to get unique sorted dates
+                const startDate = '2026-03-27'; // First day with complete data
+                const labels = [...new Set(data.filter(row => row.date < today && row.date >= startDate).map(row => row.date))].sort();
                 
                 // Group by source and horizon
                 const datasets = {};
@@ -201,7 +202,7 @@
                 
                 data.forEach(row => {
                     if (row.mae === null || row.mae === 'NaN') return;
-                    if (row.date >= today) return; // Skip today's incomplete data
+                    if (row.date >= today || row.date < startDate) return; // Skip today's and early incomplete data
                     const key = `${row.source} ${row.horizonHours}hr`;
                     if (!datasets[key]) {
                         datasets[key] = { 
