@@ -86,6 +86,25 @@
         <canvas id="trend-chart"></canvas>
         <div id="trend-loading" class="loading">Loading trend data...</div>
     </div>
+
+    <div class="card">
+        <h2>Daily High Temperature Accuracy</h2>
+        <p style="color: #666; margin-bottom: 15px;">How accurate are predicted daily high temperatures?</p>
+        <table id="daily-high-table">
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Days Ahead</th>
+                    <th>MAE (°F)</th>
+                    <th>Within 3°F</th>
+                    <th>Samples</th>
+                </tr>
+            </thead>
+            <tbody id="daily-high-body">
+                <tr><td colspan="5" class="loading">Loading daily high accuracy...</td></tr>
+            </tbody>
+        </table>
+    </div>
     
     <div class="card">
         <h2>Accuracy Summary (Last 30 Days)</h2>
@@ -251,6 +270,32 @@
             })
             .catch(err => {
                 document.getElementById('trend-loading').innerHTML = `<span class="error">Error loading trend data: ${err.message}</span>`;
+            });
+        
+        // Load daily high accuracy
+        fetch(`${API_BASE}/api/accuracy/daily-high`)
+            .then(r => {
+                if (!r.ok) throw new Error('API error');
+                return r.json();
+            })
+            .then(data => {
+                const tbody = document.getElementById('daily-high-body');
+                if (data && data.length > 0) {
+                    tbody.innerHTML = data.map(row => `
+                        <tr>
+                            <td>${row.source}</td>
+                            <td>${row.daysAhead} day${row.daysAhead > 1 ? 's' : ''}</td>
+                            <td>${row.mae.toFixed(2)}</td>
+                            <td>${row.pctWithin3F.toFixed(1)}%</td>
+                            <td>${row.samples}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5">No daily high data available yet</td></tr>';
+                }
+            })
+            .catch(err => {
+                document.getElementById('daily-high-body').innerHTML = `<tr><td colspan="5" class="error">Error loading daily high data: ${err.message}</td></tr>`;
             });
     </script>
 </body>
